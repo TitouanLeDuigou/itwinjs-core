@@ -7,7 +7,7 @@
  */
 import * as path from "path";
 import * as Semver from "semver";
-import { AccessToken, DbResult, Guid, Id64, Id64Set, Id64String, IModelStatus, Logger, LogLevel, MarkRequired, YieldManager } from "@itwin/core-bentley";
+import { AccessToken, CompressedId64Set, DbResult, Guid, Id64, Id64Set, Id64String, IModelStatus, Logger, LogLevel, MarkRequired, YieldManager } from "@itwin/core-bentley";
 import * as ECSchemaMetaData from "@itwin/ecschema-metadata";
 import { Point3d, Transform } from "@itwin/core-geometry";
 import {
@@ -20,8 +20,8 @@ import {
   Code, CodeSpec, ElementAspectProps, ElementProps, ExternalSourceAspectProps, FontProps, GeometricElement2dProps, GeometricElement3dProps, IModel,
   IModelError, ModelProps, Placement2d, Placement3d, PrimitiveTypeCode, PropertyMetaData,
 } from "@itwin/core-common";
-import { IModelExporter, IModelExportHandler } from "./IModelExporter";
-import { IModelImporter } from "./IModelImporter";
+import { IModelExporter, IModelExporterState, IModelExportHandler } from "./IModelExporter";
+import { IModelImporter, IModelImporterState } from "./IModelImporter";
 import { TransformerLoggerCategory } from "./TransformerLoggerCategory";
 
 const loggerCategory: string = TransformerLoggerCategory.IModelTransformer;
@@ -922,6 +922,36 @@ export class IModelTransformer extends IModelExportHandler {
     this.importer.computeProjectExtents();
   }
 
+  /**
+   * To "resume" an iModel Transformation you need:
+   * - the sourceDb at the same changeset
+   * - the same targetDb in the state in which it was before
+   * @param sourceDb the source iModel that was used to create the TransformationState
+   * @param targetDb the target iModel that was used during the TransformationState
+   * @param state
+   */
+  public static resumeTransformation(sourceDb: IModelDb, targetDb: IModelDb, state: TransformationState): IModelTransformer {
+    const transformer = new IModelTransformer(sourceDb, targetDb, state.options);
+    // transformer.
+    transformer._deferredElementIds = new Set(state.deferredElementIds);
+    transformer.context.resetState(state.importContextState);
+    return transformer;
+  }
+
+  /**
+   * Get the state of the active transformation in a serializable format
+   * This state can be used by [[resumeTransformation]] to resume a transformation from this point.
+   */
+  public serializeState(): TransformationState {
+    return {
+      options: this._options,
+      deferredElementIds: CompressedId64Set.compressSet(this._deferredElementIds),
+      exporterState: this.exporter.serializeState(),
+      importerState: this.importer.serializeState(),
+      importContextState: this.importContextState.serializeState(),
+    };
+  }
+
   /** Export changes from the source iModel and import the transformed entities into the target iModel.
  * Inserts, updates, and deletes are determined by inspecting the changeset(s).
  * @param accessToken A valid access token string
@@ -938,6 +968,23 @@ export class IModelTransformer extends IModelExportHandler {
     await this.processDeferredElements();
     this.importer.computeProjectExtents();
   }
+}
+
+/**
+ * The JSON format of a serialized IModelTransformer instance's state
+ * Used for starting a transformer in the middle of a transformation,
+ * such as resuming a crashed transformation
+ *
+ * @note Must be kept synchronized with IModelExporter
+ */
+export interface TransformationState {
+  sourceDbChangeset?: string;
+  targetDbChangeset?: string;
+  importerState: IModelImporterState;
+  exporterState: IModelExporterState;
+  importContextState: IModelCloneContextState;
+  options: IModelTransformOptions;
+  deferredElementIds: CompressedId64Set;
 }
 
 /** IModelTransformer that clones the contents of a template model.
