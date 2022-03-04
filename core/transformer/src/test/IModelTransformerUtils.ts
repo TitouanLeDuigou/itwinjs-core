@@ -220,7 +220,11 @@ export class IModelTransformerTestUtils {
 export async function assertIdentityTransformation(
   sourceDb: IModelDb,
   targetDb: IModelDb,
-  transformer: IModelTransformer,
+  /**
+   * Subset of IModelTransformer type, so you can pass an IModelTransformer instance or it implement yourself
+   * it must contain a function for determining the target element id from a source element id
+   */
+  remapContainer: { context: { findTargetElementId(id: Id64String): Id64String } },
   { expectedElemsOnlyInSource = [] }: { expectedElemsOnlyInSource?: Partial<ElementProps>[] } = {}
 ) {
   const geometryConversionTolerance = 1e-10;
@@ -232,7 +236,7 @@ export async function assertIdentityTransformation(
   for await (const [sourceElemId] of sourceDb.query(
     "SELECT ECInstanceId FROM bis.Element"
   )) {
-    const targetElemId = transformer.context.findTargetElementId(sourceElemId);
+    const targetElemId = remapContainer.context.findTargetElementId(sourceElemId);
     const sourceElem = sourceDb.elements.getElement(sourceElemId);
     const targetElem = targetDb.elements.tryGetElement(targetElemId);
     // expect(targetElem.toExist)
@@ -261,7 +265,7 @@ export async function assertIdentityTransformation(
             relationTargetInTargetId = stmt.getValue(0).getId() ?? Id64.invalid;
           });
           const mappedRelationTargetInTargetId =
-            transformer.context.findTargetElementId(relationTargetInSourceId);
+            remapContainer.context.findTargetElementId(relationTargetInSourceId);
           expect(relationTargetInTargetId).to.equal(
             mappedRelationTargetInTargetId
           );
@@ -343,7 +347,7 @@ export async function assertIdentityTransformation(
     "SELECT ECInstanceId FROM bis.Model"
   )) {
     const targetModelId =
-      transformer.context.findTargetElementId(sourceModelId);
+      remapContainer.context.findTargetElementId(sourceModelId);
     const sourceModel = sourceDb.models.getModel(sourceModelId);
     const targetModel = targetDb.models.tryGetModel(targetModelId);
     // expect(targetModel.toExist)
@@ -406,9 +410,9 @@ export async function assertIdentityTransformation(
   for (const relInSource of sourceRelationships.values()) {
     const isOnlyInSource = onlyInSourceElements.has(relInSource.SourceECInstanceId) && onlyInSourceElements.has(relInSource.TargetECInstanceId);
     if (isOnlyInSource) continue;
-    const relSourceInTarget = transformer.context.findTargetElementId(relInSource.SourceECInstanceId);
+    const relSourceInTarget = remapContainer.context.findTargetElementId(relInSource.SourceECInstanceId);
     expect(relSourceInTarget).to.not.equal(Id64.invalid);
-    const relTargetInTarget = transformer.context.findTargetElementId(relInSource.TargetECInstanceId);
+    const relTargetInTarget = remapContainer.context.findTargetElementId(relInSource.TargetECInstanceId);
     expect(relTargetInTarget).to.not.equal(Id64.invalid);
     const relInTargetKey = makeRelationKey({ SourceECInstanceId: relSourceInTarget, TargetECInstanceId: relTargetInTarget });
     const relInTarget = targetRelationshipQueue.get(relInTargetKey);
