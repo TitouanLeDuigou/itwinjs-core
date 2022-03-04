@@ -5,7 +5,7 @@
 /** @packageDocumentation
  * @module iModels
  */
-import { Id64, Id64String, IModelStatus, Logger } from "@itwin/core-bentley";
+import { CompressedId64Set, Id64, Id64String, IModelStatus, Logger } from "@itwin/core-bentley";
 import {
   AxisAlignedBox3d, Base64EncodedString, ElementAspectProps, ElementProps, EntityProps, IModel, IModelError, ModelProps, PrimitiveTypeCode,
   PropertyMetaData, RelatedElement, SubCategoryProps,
@@ -487,10 +487,20 @@ export class IModelImporter implements Required<IModelImportOptions> {
       }
     }
   }
+
+  public serializeState(): IModelImporterState {
+    return {
+      options: this.options,
+      targetDbId: this.targetDb.iModelId || this.targetDb.nativeDb.getFilePath(),
+      doNotUpdateElementIds: CompressedId64Set.compressSet(this.doNotUpdateElementIds),
+    };
+  }
 }
 
 export interface IModelImporterState {
+  options: IModelImportOptions;
   targetDbId: string;
+  doNotUpdateElementIds: CompressedId64Set;
 }
 
 /** Returns true if a change within an Entity is detected.

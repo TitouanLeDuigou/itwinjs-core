@@ -13,7 +13,7 @@ import { Point3d, Transform } from "@itwin/core-geometry";
 import {
   ChannelRootAspect, DefinitionElement, DefinitionModel, DefinitionPartition, ECSqlStatement, Element, ElementAspect, ElementMultiAspect,
   ElementOwnsExternalSourceAspects, ElementRefersToElements, ElementUniqueAspect, ExternalSource, ExternalSourceAspect, ExternalSourceAttachment,
-  FolderLink, GeometricElement2d, GeometricElement3d, IModelCloneContext, IModelDb, IModelJsFs, InformationPartitionElement, KnownLocations, Model,
+  FolderLink, GeometricElement2d, GeometricElement3d, IModelCloneContext, IModelCloneContextState, IModelDb, IModelJsFs, InformationPartitionElement, KnownLocations, Model,
   RecipeDefinitionElement, Relationship, RelationshipProps, Schema, Subject, SynchronizationConfigLink,
 } from "@itwin/core-backend";
 import {
@@ -934,7 +934,7 @@ export class IModelTransformer extends IModelExportHandler {
     const transformer = new IModelTransformer(sourceDb, targetDb, state.options);
     // transformer.
     transformer._deferredElementIds = new Set(state.deferredElementIds);
-    transformer.context.resetState(state.importContextState);
+    transformer.context.loadState(state.importContextState);
     return transformer;
   }
 
@@ -942,13 +942,13 @@ export class IModelTransformer extends IModelExportHandler {
    * Get the state of the active transformation in a serializable format
    * This state can be used by [[resumeTransformation]] to resume a transformation from this point.
    */
-  public serializeState(): TransformationState {
+  public serializeState(nativeStatePath: string): TransformationState {
     return {
       options: this._options,
       deferredElementIds: CompressedId64Set.compressSet(this._deferredElementIds),
       exporterState: this.exporter.serializeState(),
       importerState: this.importer.serializeState(),
-      importContextState: this.importContextState.serializeState(),
+      importContextState: this.context.serializeState(nativeStatePath),
     };
   }
 
