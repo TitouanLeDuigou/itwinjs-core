@@ -151,6 +151,10 @@ export class IModelCloneContext {
     jsClass["onCloned"](this, sourceElement.toJSON(), targetElementProps);
     return targetElementProps;
   }
+
+  public serializeState(): IModelCloneContextState {
+    return this._nativeContext.serializeState();
+  }
 }
 
 // TODO: move to native
