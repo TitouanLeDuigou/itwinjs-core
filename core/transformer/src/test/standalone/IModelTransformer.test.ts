@@ -28,6 +28,7 @@ import {
   ClassCounter, FilterByViewTransformer, IModelToTextFileExporter, IModelTransformer3d, IModelTransformerTestUtils, PhysicalModelConsolidator,
   RecordingIModelImporter, TestIModelTransformer, TransformerExtensiveTestScenario,
 } from "../IModelTransformerUtils";
+import { IModelTransformOptions } from "../../IModelTransformer";
 
 describe("IModelTransformer", () => {
   const outputDir: string = path.join(KnownTestLocations.outputDir, "IModelTransformer");
@@ -1878,7 +1879,15 @@ describe("IModelTransformer", () => {
     let crashingEnabled = false;
 
     // here to test that types work when calling resumeTransformation
-    class CrashingTransformer extends IModelTransformer { }
+    class CrashingTransformer extends IModelTransformer {
+      constructor(opts: {
+        source: IModelDb;
+        target: IModelDb;
+        options?: IModelTransformOptions;
+      }) {
+        super(opts.source, opts.target, opts.options);
+      }
+    }
 
     for (const [key, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(
       IModelHost.platform
@@ -1887,7 +1896,7 @@ describe("IModelTransformer", () => {
       if (typeof superValue === "function" && descriptor.writable) {
         sinon.replace(IModelHost.platform, key, function (this: IModelJsNative.DgnDb, ...args: any[]) {
           if (crashingEnabled) {
-            const METHOD_CRASH_PROBABILITY = 1/200;
+            const METHOD_CRASH_PROBABILITY = 1/800;
             // this does not at all test mid-method crashes... that might be doable by racing timeouts on async functions...
             if (crashingEnabled && Math.random() <= METHOD_CRASH_PROBABILITY) throw Error("fake native crash");
           }
@@ -1906,7 +1915,7 @@ describe("IModelTransformer", () => {
       if (typeof superValue === "function" && descriptor.writable) {
         sinon.replace(IModelTransformer.prototype, key, function (this: IModelTransformer, ...args: any[]) {
           if (crashingEnabled) {
-            const METHOD_CRASH_PROBABILITY = 1/200;
+            const METHOD_CRASH_PROBABILITY = 1/800;
             // this does not at all test mid-method crashes... that might be doable by racing timeouts on async functions...
             if (crashingEnabled && Math.random() <= METHOD_CRASH_PROBABILITY) throw Error("fake crash");
           }
@@ -1922,7 +1931,7 @@ describe("IModelTransformer", () => {
       async function transformWithCrashAndRecover() {
         const targetDbPath = IModelTestUtils.prepareOutputFile("IModelTransformer", "ResumeTrasformationCrash.bim");
         const targetDb = SnapshotDb.createEmpty(targetDbPath, sourceDb);
-        let transformer = new CrashingTransformer(sourceDb, targetDb);
+        let transformer = new CrashingTransformer({ source: sourceDb, target: targetDb });
         const MAX_ITERS = 100;
         let crashCount = 0;
         let timer: StopWatch;
@@ -1948,7 +1957,7 @@ describe("IModelTransformer", () => {
               if (fs.existsSync(dumpPath)) fs.unlinkSync(dumpPath);
               crashingEnabled = false;
               const state = transformer.serializeState(dumpPath);
-              transformer = CrashingTransformer.resumeTransformation(state, sourceDb, targetDb);
+              transformer = CrashingTransformer.resumeTransformation(state, { source: sourceDb, target: targetDb });
               crashingEnabled = true;
               console.log(`crashed after ${timer.elapsed.seconds} seconds`); // eslint-disable-line no-console
             } catch (err) {
@@ -1966,6 +1975,7 @@ describe("IModelTransformer", () => {
       }
 
       async function transformNoCrash(): Promise<IModelDb> {
+        crashingEnabled = false;
         const targetDbPath = IModelTestUtils.prepareOutputFile("IModelTransformer", "ResumeTrasformationNoCrash.bim");
         const targetDb = SnapshotDb.createEmpty(targetDbPath, sourceDb);
         const transformer = new IModelTransformer(sourceDb, targetDb);
